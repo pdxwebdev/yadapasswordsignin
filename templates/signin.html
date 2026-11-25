@@ -78,6 +78,11 @@
         <a class="btn secondary" href="/password-rotation">Extension harness</a>
       </p>
       <div id="msg" role="status" aria-live="polite"></div>
+      <div id="signinCode" class="tutorial" hidden>
+        <p>Approve in Yada Password. If it asks for a code, enter:</p>
+        <div class="mono" id="signinCodeValue" style="font-size:28px;letter-spacing:6px;font-weight:700">------</div>
+        <p style="font-size:13px;margin:8px 0 0">The Yada Password extension in this browser approves without a code.</p>
+      </div>
       <div id="track" class="track" aria-hidden="true"><span></span></div>
       <div id="signinTutorial" class="tutorial" hidden>
         <p>How to approve the sign-in in Yada Password</p>
@@ -96,6 +101,8 @@
     const $st = document.getElementById("extStatus");
     const $track = document.getElementById("track");
     const $signinTutorial = document.getElementById("signinTutorial");
+    const $signinCode = document.getElementById("signinCode");
+    const $signinCodeValue = document.getElementById("signinCodeValue");
     const $user = document.getElementById("signinUsername");
     const SIGNIN_LABEL = "Sign in";
     const REGISTER_LABEL = "Register this origin";
@@ -267,14 +274,16 @@
       if (created && created.proxied && home) return home;
       return "";
     }
-    async function fetchAuthView(sessionId, base, signal) {
+    async function fetchAuthView(sessionId, base, signal, rpToken) {
       const root = String(base || "").replace(/\/+$/, "");
       const url =
         root +
         "/password-rotation/auth-session/" +
         encodeURIComponent(sessionId);
+      const headers = { Accept: "application/json" };
+      if (rpToken) headers["X-Password-Auth-RP-Token"] = rpToken;
       const res = await fetch(url, {
-        headers: { Accept: "application/json" },
+        headers,
         credentials: root && root !== origin ? "omit" : "include",
         signal,
       });
@@ -286,6 +295,7 @@
     }
     async function waitForAuthApproval(sessionId, created, signal) {
       const remote = authPollBase(created);
+      const rpToken = created && created.rp_token;
       const started = Date.now();
       while (!signal.aborted) {
         if (Date.now() - started > 180000) {
@@ -295,7 +305,7 @@
         let view = null;
         if (remote) {
           try {
-            view = await fetchAuthView(sessionId, remote, signal);
+            view = await fetchAuthView(sessionId, remote, signal, rpToken);
           } catch (err) {
             if (err && err.name === "AbortError") throw err;
             view = null;
@@ -303,7 +313,7 @@
         }
         let localView = null;
         try {
-          localView = await fetchAuthView(sessionId, "", signal);
+          localView = await fetchAuthView(sessionId, "", signal, rpToken);
         } catch (err) {
           if (err && err.name === "AbortError") throw err;
         }
@@ -440,6 +450,24 @@
         if (!createRes.ok || !created.status || !created.session_id) {
           throw new Error(created.message || "failed to create sign-in request");
         }
+        // The extension only approves a request that the active tab started.
+        try {
+          sessionStorage.setItem(
+            "yadaActiveAuthSession",
+            JSON.stringify({
+              session_id: created.session_id,
+              origin: origin,
+              at: Date.now(),
+              rp_token: created.rp_token || "",
+            })
+          );
+        } catch (err) {
+          /* storage may be disabled; the extension will refuse to approve */
+        }
+        if ($signinCode && $signinCodeValue && created.verification_code) {
+          $signinCodeValue.textContent = String(created.verification_code);
+          $signinCode.hidden = false;
+        }
         const home = created.home_node ? " · " + created.home_node : "";
         if (created.home_node) {
           window.postMessage(
@@ -478,6 +506,12 @@
         else setMsg("Cancelled", "err");
       } finally {
         signinAbort = null;
+        try {
+          sessionStorage.removeItem("yadaActiveAuthSession");
+        } catch (err) {
+          /* ignore */
+        }
+        if ($signinCode) $signinCode.hidden = true;
         btn.textContent = SIGNIN_LABEL;
         if ($signinTutorial) $signinTutorial.hidden = true;
       }
