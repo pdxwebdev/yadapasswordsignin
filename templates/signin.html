@@ -431,6 +431,12 @@
           throw new Error(created.message || "failed to create sign-in request");
         }
         const home = created.home_node ? " · " + created.home_node : "";
+        if (created.home_node) {
+          window.postMessage(
+            { type: "YADA_PASSWORD_USE_HOME", home: created.home_node },
+            "*"
+          );
+        }
         showProgress(
           (created.delivered
             ? "Delivered to Yada Password"
