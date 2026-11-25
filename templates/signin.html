@@ -56,6 +56,10 @@
       100% { transform: translateX(320%); }
     }
     code { color: #c9d1d9; }
+    .tutorial { margin: 16px 0 0; padding: 12px; border: 1px solid #30363d; border-radius: 6px; background: #0d1117; }
+    .tutorial[hidden] { display: none; }
+    .tutorial p { margin: 0 0 8px; font-weight: 600; color: #c9d1d9; }
+    .tutorial video { display: block; width: 100%; max-width: 320px; border-radius: 6px; background: #000; }
   </style>
 </head>
 <body>
@@ -75,6 +79,10 @@
       </p>
       <div id="msg" role="status" aria-live="polite"></div>
       <div id="track" class="track" aria-hidden="true"><span></span></div>
+      <div id="signinTutorial" class="tutorial" hidden>
+        <p>How to approve the sign-in in Yada Password</p>
+        <video src="/yadacoinstatic/onramp/approve-signin.mp4" controls playsinline preload="metadata" aria-label="Tutorial: approving the sign-in in Yada Password"></video>
+      </div>
     </div>
   </main>
   <script>
@@ -87,6 +95,7 @@
     const $msg = document.getElementById("msg");
     const $st = document.getElementById("extStatus");
     const $track = document.getElementById("track");
+    const $signinTutorial = document.getElementById("signinTutorial");
     const $user = document.getElementById("signinUsername");
     const SIGNIN_LABEL = "Sign in";
     const REGISTER_LABEL = "Register this origin";
@@ -407,6 +416,7 @@
       signinAbort = new AbortController();
       const signal = signinAbort.signal;
       const btn = document.getElementById("signinBtn");
+      if ($signinTutorial) $signinTutorial.hidden = true;
       startProgress("Creating sign-in request…");
       btn.textContent = "Cancel";
       try {
@@ -444,6 +454,7 @@
             " and Approve" +
             home
         );
+        if ($signinTutorial) $signinTutorial.hidden = false;
         const view = await waitForAuthApproval(created.session_id, created, signal);
         if (!view.ok && !view.operator_session) {
           throw new Error(view.message || "sign-in was not approved");
@@ -468,6 +479,7 @@
       } finally {
         signinAbort = null;
         btn.textContent = SIGNIN_LABEL;
+        if ($signinTutorial) $signinTutorial.hidden = true;
       }
     };
     if ($user) {
