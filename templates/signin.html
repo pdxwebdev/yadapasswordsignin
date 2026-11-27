@@ -429,7 +429,19 @@
       if ($signinTutorial) $signinTutorial.hidden = true;
       startProgress("Creating sign-in request…");
       btn.textContent = "Cancel";
+      let homeAnnounce = null;
       try {
+        // Operator sessions always belong to this node. Tell the extension to
+        // switch to this vault and connect here before creating the request so
+        // the push finds a live stream.
+        const announceHome = () => {
+          window.postMessage(
+            { type: "YADA_PASSWORD_USE_HOME", home: origin, username: username },
+            "*"
+          );
+        };
+        announceHome();
+        await new Promise((resolve) => setTimeout(resolve, 700));
         const expectedHash = await expectedSigninHash(signal);
         const createRes = await fetch("/password-rotation/auth-session", {
           method: "POST",
@@ -469,12 +481,10 @@
           $signinCode.hidden = false;
         }
         const home = created.home_node ? " · " + created.home_node : "";
-        if (created.home_node) {
-          window.postMessage(
-            { type: "YADA_PASSWORD_USE_HOME", home: created.home_node },
-            "*"
-          );
-        }
+        announceHome();
+        // Re-announce while waiting so an extension that reconnected after a
+        // node restart still drains this pending request.
+        homeAnnounce = setInterval(announceHome, 5000);
         showProgress(
           (created.delivered
             ? "Delivered to Yada Password"
@@ -505,6 +515,7 @@
         if (!aborted) setMsg(String(e.message || e), "err");
         else setMsg("Cancelled", "err");
       } finally {
+        if (homeAnnounce) clearInterval(homeAnnounce);
         signinAbort = null;
         try {
           sessionStorage.removeItem("yadaActiveAuthSession");
